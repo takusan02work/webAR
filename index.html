@@ -200,32 +200,21 @@
         btnNativeAR.addEventListener('click', () => {
             log("「アプリで見る」クリック");
 
-            const isAndroid = /Android/i.test(navigator.userAgent);
+            // 強制的にScene Viewer (Android) / Quick Look (iOS) を指定
+            // WebXRを除外することで、ブラウザ内ARを無効化し、外部アプリ連携を強制します
+            modelViewer.setAttribute('ar-modes', 'scene-viewer quick-look');
+            log("設定: ar-modes = 'scene-viewer quick-look'");
 
-            if (isAndroid) {
-                log("Android端末検出: Intent起動を試みます");
-                // GLBファイルの絶対URLを取得
-                const glbUrl = new URL(modelViewer.src, window.location.href).href;
-                const title = modelViewer.alt || "3D Model";
-
-                // Android Intent URLの構築 (Scene Viewer直接起動)
-                // mode=ar_only: ARモードを強制
-                const intentUrl = `intent://arvr.google.com/scene-viewer/1.0?file=${encodeURIComponent(glbUrl)}&mode=ar_only&title=${encodeURIComponent(title)}#Intent;scheme=https;package=com.google.ar.core;action=android.intent.action.VIEW;S.browser_fallback_url=${encodeURIComponent(window.location.href)};end;`;
-
-                log("Intent遷移: " + intentUrl);
-
-                // 遷移実行
-                window.location.href = intentUrl;
-            } else {
-                // iOSなどは従来の起動方法
-                log("非Android: 標準起動");
-                modelViewer.setAttribute('ar-modes', 'scene-viewer quick-look');
-
-                setTimeout(() => {
-                    log("activateAR() 実行");
-                    modelViewer.activateAR();
-                }, 100);
-            }
+            setTimeout(async () => {
+                try {
+                    log("activateAR() 実行...");
+                    await modelViewer.activateAR();
+                    log("activateAR() 呼び出し完了");
+                } catch (error) {
+                    log("Native AR Error: " + error.message);
+                    alert("アプリの起動に失敗しました: " + error.message);
+                }
+            }, 100);
         });
 
         // WebAR (WebXR) 開始

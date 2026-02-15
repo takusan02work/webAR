@@ -178,6 +178,13 @@
         Debug Log...
     </div>
 
+    <!-- 診断用ボタン: 動作確認済みモデルへ切り替え -->
+    <button id="btn-test-model" style="
+        position: absolute; top: 10px; left: 10px; z-index: 2000;
+        padding: 5px 10px; font-size: 10px; background: orange; border: none; border-radius: 4px; color: black;">
+        ⚠️ テスト用モデルに切替
+    </button>
+
     <script>
         const modelViewer = document.querySelector('model-viewer');
         const captureButton = document.getElementById('capture-button');
@@ -186,22 +193,33 @@
         const btnNativeAR = document.getElementById('btn-native-ar');
         const btnWebAR = document.getElementById('btn-web-ar');
         const debugLog = document.getElementById('debug-log');
+        const btnTestModel = document.getElementById('btn-test-model');
 
         // ログ出力関数
         const log = (msg) => {
             console.log(msg);
             const time = new Date().toLocaleTimeString();
             debugLog.innerHTML = `[${time}] ${msg}<br>` + debugLog.innerHTML;
+            // ログが出たら表示する
+            debugLog.style.display = 'block';
         };
 
         log("初期化開始");
+
+        // テストモデル切り替え機能
+        btnTestModel.addEventListener('click', () => {
+            log("テストモデル(Astronaut)に切り替えます...");
+            modelViewer.src = "https://modelviewer.dev/shared-assets/models/Astronaut.glb";
+            modelViewer.iosSrc = "https://modelviewer.dev/shared-assets/models/Astronaut.usdz";
+            modelViewer.alt = "テスト用宇宙飛行士";
+            alert("Google公式のサンプルモデル(宇宙飛行士)に切り替えました。\nこれで「アプリで見る」を試してください。\n\nもしこれで動くなら、あなたのファイル(neko_s.glb)に問題があるか、GitHubのアクセス権(Private)の問題です。");
+        });
 
         // ネイティブAR (Scene Viewer / Quick Look) 開始
         btnNativeAR.addEventListener('click', () => {
             log("「アプリで見る」クリック");
 
             // 強制的にScene Viewer (Android) / Quick Look (iOS) を指定
-            // WebXRを除外することで、ブラウザ内ARを無効化し、外部アプリ連携を強制します
             modelViewer.setAttribute('ar-modes', 'scene-viewer quick-look');
             log("設定: ar-modes = 'scene-viewer quick-look'");
 
@@ -212,7 +230,7 @@
                     log("activateAR() 呼び出し完了");
                 } catch (error) {
                     log("Native AR Error: " + error.message);
-                    alert("アプリの起動に失敗しました: " + error.message);
+                    alert("アプリの起動に失敗しました:\n" + error.message + "\n\n※GitHubがPrivateリポジリの場合、外部アプリ(SceneViewer)からファイルにアクセスできず失敗します。Publicにするか、GLBを公開サーバーに置いてください。");
                 }
             }, 100);
         });
@@ -223,9 +241,6 @@
             // WebXRのみを許可設定に変更
             modelViewer.setAttribute('ar-modes', 'webxr');
             log("ar-modesを 'webxr' に設定");
-
-            // デバッグログを表示（ユーザーが見えるように）
-            debugLog.style.display = 'block';
 
             setTimeout(() => {
                 log("activateAR() 実行");

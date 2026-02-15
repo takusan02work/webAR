@@ -23,41 +23,6 @@
             height: 100%;
         }
 
-        #ar-button {
-            background-image: url(https://modelviewer.dev/shared-assets/icons/ic_view_in_ar_new_googblue_48dp.png);
-            background-repeat: no-repeat;
-            background-size: 20px 20px;
-            background-position: 12px 50%;
-            background-color: #fff;
-            position: absolute;
-            left: 50%;
-            transform: translateX(-50%);
-            bottom: 20px;
-            padding: 0px 16px 0px 40px;
-            font-family: Roboto, Regular, Helvetica, sans-serif;
-            font-size: 14px;
-            color: #4285f4;
-            height: 36px;
-            line-height: 36px;
-            border-radius: 18px;
-            border: 1px solid #DADCE0;
-            cursor: pointer;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.25);
-            z-index: 10;
-        }
-
-        #ar-button:active {
-            background-color: #E8EAED;
-        }
-
-        #ar-button:focus {
-            outline: none;
-        }
-
-        #ar-button:focus-visible {
-            outline: 1px solid #4285f4;
-        }
-
         /* ステータス表示のスタイル調整 */
         .status-badge {
             position: absolute;
@@ -121,13 +86,29 @@
             opacity: 1;
         }
 
-        /* スクリーンショットでUIが写り込まないようにする場合の調整が必要ですが、
-           toBlobはキャンバスの内容だけを保存するため、DOM要素は写りません。 */
+        /* フォールバック用ボタン（ネイティブAR起動） */
+        #fallback-button {
+            position: absolute;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 10px 20px;
+            background-color: #4285f4;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            font-size: 14px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+            z-index: 2000;
+            cursor: pointer;
+            display: none;
+            /* 初期状態は非表示 */
+        }
     </style>
     <script>
-        // HTTPSチェック: カメラ機能はHTTPSまたはlocalhostでのみ動作します
+        // HTTPSチェック
         if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
-            alert('WebAR（カメラ機能）を利用するには、HTTPS接続（鍵マークのついたURL）が必要です。\n現在、機能が制限されている可能性があります。');
+            alert('WebAR（カメラ機能）を利用するには、HTTPS接続が必要です。');
         }
     </script>
 </head>
@@ -135,8 +116,7 @@
 <body>
     <!-- 
       3Dモデルの指定
-      src: Android用 (.glb)
-      ios-src: iOS用 (.usdz)
+      ar-modes: 最初はwebxrを試みる
     -->
     <model-viewer src="./neko_s.glb" ios-src="./neko_iphone_s.usdz" alt="猫の3Dモデル" ar
         ar-modes="webxr scene-viewer quick-look" ar-placement="floor" ar-scale="auto" camera-controls auto-rotate
@@ -147,8 +127,14 @@
         </button>
     </model-viewer>
 
+    <!-- 写真撮影ボタン -->
     <button id="capture-button" aria-label="写真を撮る" style="display: none;">
         📷
+    </button>
+
+    <!-- ネイティブARフォールバックボタン -->
+    <button id="fallback-button">
+        ネイティブARで開く (Android)
     </button>
 
     <!-- 状況表示用 -->
@@ -170,58 +156,116 @@
     <!-- キャプチャ完了メッセージ -->
     <div id="capture-message">保存しました</div>
 
+    <!-- デバッグログ表示用 -->
+    <div id="debug-log" style="
+        position: absolute; top: 10px; right: 10px; width: 200px; max-height: 150px; 
+        background: rgba(0,0,0,0.7); color: lime; font-family: monospace; font-size: 10px; 
+        overflow-y: auto; z-index: 2000; padding: 5px; pointer-events: none; border-radius: 4px;">
+        Debug Log...
+    </div>
+
     <script>
         const modelViewer = document.querySelector('model-viewer');
         const captureButton = document.getElementById('capture-button');
         const captureMessage = document.getElementById('capture-message');
         const arPrompt = document.getElementById('ar-prompt');
+        const fallbackButton = document.getElementById('fallback-button');
+        const debugLog = document.getElementById('debug-log');
+
+        // ログ出力関数 (上書きではなく追記)
+        const log = (msg) => {
+            console.log(msg);
+            const time = new Date().toLocaleTimeString();
+            debugLog.innerHTML = `[${time}] ${msg}<br>` + debugLog.innerHTML;
+        };
+
+        log("初期化開始");
 
         // AR起動関数
-        const startAR = () => {
-            // activateAR() を呼び出してARを開始します
+        const startAR = async () => {
+            log("startAR() 呼び出し");
+
             try {
-                modelViewer.activateAR();
+                // activateAR を呼び出す
+                log("activateAR() 実行...");
+                await modelViewer.activateAR();
+                log("activateAR() 呼び出し成功 (セッション開始待ち)");
                 arPrompt.style.display = 'none';
             } catch (e) {
-                console.log("AR起動待機中またはエラー: ", e);
+                log("エラー: " + e.message);
+
+                // エラー時はフォールバックボタンを表示
+                fallbackButton.style.display = 'block';
+                log("フォールバックボタンを表示しました");
             }
         };
 
+        // フォールバックボタン: ネイティブAR (SceneViewer) を強制的に試みる
+        fallbackButton.addEventListener('click', () => {
+            log("ネイティブARへ切り替え試行");
+            // ar-modesをscene-viewer優先に変更してみる
+            modelViewer.setAttribute('ar-modes', 'scene-viewer webxr quick-look');
+            // 少し待ってから再起動
+            setTimeout(() => {
+                modelViewer.activateAR();
+            }, 100);
+        });
+
         // ページ読み込み時に自動起動を試みる
         window.addEventListener('load', () => {
+            log("Window Loaded");
             setTimeout(() => {
+                log("自動起動試行");
                 startAR();
             }, 1000);
         });
 
-        // 画面タップでAR起動（フォールバック）
+        // 画面タップでAR起動
         arPrompt.addEventListener('click', () => {
+            log("オーバーレイ クリック");
             startAR();
         });
 
         // 通常の画面クリックでも起動を試みる
-        document.body.addEventListener('click', () => {
-            if (arPrompt.style.display !== 'none') {
+        document.body.addEventListener('click', (e) => {
+            // ボタン類は除外
+            if (e.target.tagName !== 'BUTTON' && arPrompt.style.display !== 'none') {
+                log("Body クリック");
                 startAR();
             }
         });
 
         // ARステータスの監視
         modelViewer.addEventListener('ar-status', (event) => {
-            if (event.detail.status === 'session-started') {
-                // AR開始時: プロンプト非表示、撮影ボタン表示
+            const status = event.detail.status;
+            log("AR Status: " + status);
+
+            if (status === 'session-started') {
+                // WebXRセッション開始
                 arPrompt.style.display = 'none';
                 captureButton.style.display = 'flex';
-            } else if (event.detail.status === 'not-presenting') {
-                // AR終了時: プロンプト再表示、撮影ボタン非表示
+                fallbackButton.style.display = 'none'; // 成功したら消す
+                log("AR開始: 成功");
+            } else if (status === 'not-presenting') {
                 arPrompt.style.display = 'flex';
                 captureButton.style.display = 'none';
+                log("AR終了");
+            } else if (status === 'failed') {
+                log("AR起動失敗");
+                alert("ARの起動に失敗しました。ネイティブARを試します。");
+                fallbackButton.style.display = 'block';
             }
+        });
+
+        // エラーイベント
+        modelViewer.addEventListener('error', (e) => {
+            log("Error: " + (e.detail.type || "unknown"));
+            fallbackButton.style.display = 'block';
         });
 
         // スクリーンショット撮影機能
         captureButton.addEventListener('click', async (e) => {
-            e.stopPropagation(); // AR起動イベントのバブリング防止
+            e.stopPropagation();
             try {
                 const blob = await modelViewer.toBlob({ mimeType: 'image/png' });
                 const url = URL.createObjectURL(blob);
@@ -233,13 +277,12 @@
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
 
-                // 撮影完了メッセージを表示
                 captureMessage.classList.add('show');
                 setTimeout(() => {
                     captureMessage.classList.remove('show');
                 }, 2000);
             } catch (error) {
-                console.error('撮影に失敗しました:', error);
+                log("撮影エラー: " + error.message);
                 alert('撮影に失敗しました。');
             }
         });

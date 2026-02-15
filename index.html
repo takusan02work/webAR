@@ -132,25 +132,39 @@
         📷
     </button>
 
-    <!-- ネイティブARフォールバックボタン -->
-    <button id="fallback-button">
-        ネイティブARで開く (Android)
-    </button>
-
     <!-- 状況表示用 -->
     <div class="status-badge">
         <p style="margin: 0;"><strong>WebARビューアー</strong><br>画面をタップしてARを開始</p>
     </div>
 
-    <!-- AR開始用オーバーレイ -->
+    <!-- AR開始用オーバーレイ (選択式) -->
     <div id="ar-prompt" style="
         position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
-        display: flex; align-items: center; justify-content: center; 
-        background: rgba(0,0,0,0.5); color: white; z-index: 999; cursor: pointer;">
-        <div>
-            <p style="font-size: 24px; font-weight: bold;">タップしてARを開始</p>
-            <p style="font-size: 14px;">(カメラの許可が必要です)</p>
+        display: flex; flex-direction: column; align-items: center; justify-content: center; 
+        background: rgba(0,0,0,0.6); color: white; z-index: 999;">
+
+        <div style="margin-bottom: 20px; text-align: center;">
+            <p style="font-size: 24px; font-weight: bold; margin: 0;">AR表示モードを選択</p>
+            <p style="font-size: 12px; opacity: 0.8;">(Androidの方は「アプリで見る」が推奨です)</p>
         </div>
+
+        <!-- 選択ボタン -->
+        <div style="display: flex; gap: 20px;">
+            <button id="btn-native-ar" style="
+                padding: 15px 30px; border-radius: 30px; border: none; 
+                background: #4285f4; color: white; font-weight: bold; font-size: 16px; 
+                box-shadow: 0 4px 10px rgba(0,0,0,0.3); cursor: pointer;">
+                📱 アプリで見る<br><span style="font-size:10px; font-weight:normal;">(安定版 / SceneViewer)</span>
+            </button>
+
+            <button id="btn-web-ar" style="
+                padding: 15px 30px; border-radius: 30px; border: 2px solid white; 
+                background: rgba(255,255,255,0.2); color: white; font-weight: bold; font-size: 16px; 
+                backdrop-filter: blur(5px); cursor: pointer;">
+                🌐 ブラウザで見る<br><span style="font-size:10px; font-weight:normal;">(Beta / WebXR)</span>
+            </button>
+        </div>
+        <p style="font-size: 10px; margin-top: 20px; opacity: 0.6;">※iPhoneの方はどちらを押してもQuickLookが起動します</p>
     </div>
 
     <!-- キャプチャ完了メッセージ -->
@@ -160,7 +174,7 @@
     <div id="debug-log" style="
         position: absolute; top: 10px; right: 10px; width: 200px; max-height: 150px; 
         background: rgba(0,0,0,0.7); color: lime; font-family: monospace; font-size: 10px; 
-        overflow-y: auto; z-index: 2000; padding: 5px; pointer-events: none; border-radius: 4px;">
+        overflow-y: auto; z-index: 2000; padding: 5px; pointer-events: none; border-radius: 4px; display: none;">
         Debug Log...
     </div>
 
@@ -169,10 +183,11 @@
         const captureButton = document.getElementById('capture-button');
         const captureMessage = document.getElementById('capture-message');
         const arPrompt = document.getElementById('ar-prompt');
-        const fallbackButton = document.getElementById('fallback-button');
+        const btnNativeAR = document.getElementById('btn-native-ar');
+        const btnWebAR = document.getElementById('btn-web-ar');
         const debugLog = document.getElementById('debug-log');
 
-        // ログ出力関数 (上書きではなく追記)
+        // ログ出力関数
         const log = (msg) => {
             console.log(msg);
             const time = new Date().toLocaleTimeString();
@@ -181,58 +196,33 @@
 
         log("初期化開始");
 
-        // AR起動関数
-        const startAR = async () => {
-            log("startAR() 呼び出し");
+        // ネイティブAR (Scene Viewer / Quick Look) 開始
+        btnNativeAR.addEventListener('click', () => {
+            log("「アプリで見る」クリック");
+            // Native ARのみを許可設定に変更
+            modelViewer.setAttribute('ar-modes', 'scene-viewer quick-look');
+            log("ar-modesを 'scene-viewer quick-look' に設定");
 
-            try {
-                // activateAR を呼び出す
-                log("activateAR() 実行...");
-                await modelViewer.activateAR();
-                log("activateAR() 呼び出し成功 (セッション開始待ち)");
-                arPrompt.style.display = 'none';
-            } catch (e) {
-                log("エラー: " + e.message);
-
-                // エラー時はフォールバックボタンを表示
-                fallbackButton.style.display = 'block';
-                log("フォールバックボタンを表示しました");
-            }
-        };
-
-        // フォールバックボタン: ネイティブAR (SceneViewer) を強制的に試みる
-        fallbackButton.addEventListener('click', () => {
-            log("ネイティブARへ切り替え試行");
-            // ar-modesをscene-viewer優先に変更してみる
-            modelViewer.setAttribute('ar-modes', 'scene-viewer webxr quick-look');
-            // 少し待ってから再起動
             setTimeout(() => {
+                log("activateAR() 実行");
                 modelViewer.activateAR();
             }, 100);
         });
 
-        // ページ読み込み時に自動起動を試みる
-        window.addEventListener('load', () => {
-            log("Window Loaded");
+        // WebAR (WebXR) 開始
+        btnWebAR.addEventListener('click', () => {
+            log("「ブラウザで見る」クリック");
+            // WebXRのみを許可設定に変更
+            modelViewer.setAttribute('ar-modes', 'webxr');
+            log("ar-modesを 'webxr' に設定");
+
+            // デバッグログを表示（ユーザーが見えるように）
+            debugLog.style.display = 'block';
+
             setTimeout(() => {
-                log("自動起動試行");
-                startAR();
-            }, 1000);
-        });
-
-        // 画面タップでAR起動
-        arPrompt.addEventListener('click', () => {
-            log("オーバーレイ クリック");
-            startAR();
-        });
-
-        // 通常の画面クリックでも起動を試みる
-        document.body.addEventListener('click', (e) => {
-            // ボタン類は除外
-            if (e.target.tagName !== 'BUTTON' && arPrompt.style.display !== 'none') {
-                log("Body クリック");
-                startAR();
-            }
+                log("activateAR() 実行");
+                modelViewer.activateAR();
+            }, 100);
         });
 
         // ARステータスの監視
@@ -241,29 +231,36 @@
             log("AR Status: " + status);
 
             if (status === 'session-started') {
-                // WebXRセッション開始
+                // セッション開始成功
                 arPrompt.style.display = 'none';
-                captureButton.style.display = 'flex';
-                fallbackButton.style.display = 'none'; // 成功したら消す
-                log("AR開始: 成功");
+
+                // WebXRの場合のみ撮影ボタンを表示
+                // (SceneViewer等は別アプリになるため、ここには戻ってこないか、戻ってもボタンは不要)
+                if (modelViewer.getAttribute('ar-modes') === 'webxr') {
+                    captureButton.style.display = 'flex';
+                    log("WebXRセッション: ボタン表示");
+                }
             } else if (status === 'not-presenting') {
+                // AR終了
                 arPrompt.style.display = 'flex';
                 captureButton.style.display = 'none';
-                log("AR終了");
+                log("AR終了: メニュー再表示");
+
+                // 設定をリセット（念のため）
+                modelViewer.setAttribute('ar-modes', 'webxr scene-viewer quick-look');
             } else if (status === 'failed') {
                 log("AR起動失敗");
-                alert("ARの起動に失敗しました。ネイティブARを試します。");
-                fallbackButton.style.display = 'block';
+                alert("AR起動に失敗しました。もう一方のモードをお試しください。");
             }
         });
 
         // エラーイベント
         modelViewer.addEventListener('error', (e) => {
             log("Error: " + (e.detail.type || "unknown"));
-            fallbackButton.style.display = 'block';
+            alert("エラーが発生しました: " + (e.detail.type || "unknown"));
         });
 
-        // スクリーンショット撮影機能
+        // スクリーンショット撮影機能 (WebXR用)
         captureButton.addEventListener('click', async (e) => {
             e.stopPropagation();
             try {

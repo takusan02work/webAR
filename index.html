@@ -199,14 +199,33 @@
         // ネイティブAR (Scene Viewer / Quick Look) 開始
         btnNativeAR.addEventListener('click', () => {
             log("「アプリで見る」クリック");
-            // Native ARのみを許可設定に変更
-            modelViewer.setAttribute('ar-modes', 'scene-viewer quick-look');
-            log("ar-modesを 'scene-viewer quick-look' に設定");
 
-            setTimeout(() => {
-                log("activateAR() 実行");
-                modelViewer.activateAR();
-            }, 100);
+            const isAndroid = /Android/i.test(navigator.userAgent);
+
+            if (isAndroid) {
+                log("Android端末検出: Intent起動を試みます");
+                // GLBファイルの絶対URLを取得
+                const glbUrl = new URL(modelViewer.src, window.location.href).href;
+                const title = modelViewer.alt || "3D Model";
+
+                // Android Intent URLの構築 (Scene Viewer直接起動)
+                // mode=ar_only: ARモードを強制
+                const intentUrl = `intent://arvr.google.com/scene-viewer/1.0?file=${encodeURIComponent(glbUrl)}&mode=ar_only&title=${encodeURIComponent(title)}#Intent;scheme=https;package=com.google.ar.core;action=android.intent.action.VIEW;S.browser_fallback_url=${encodeURIComponent(window.location.href)};end;`;
+
+                log("Intent遷移: " + intentUrl);
+
+                // 遷移実行
+                window.location.href = intentUrl;
+            } else {
+                // iOSなどは従来の起動方法
+                log("非Android: 標準起動");
+                modelViewer.setAttribute('ar-modes', 'scene-viewer quick-look');
+
+                setTimeout(() => {
+                    log("activateAR() 実行");
+                    modelViewer.activateAR();
+                }, 100);
+            }
         });
 
         // WebAR (WebXR) 開始

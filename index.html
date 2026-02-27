@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ja">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
@@ -7,7 +8,8 @@
     <!-- model-viewerコンポーネントの読み込み -->
     <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
     <style>
-        body, html {
+        body,
+        html {
             margin: 0;
             padding: 0;
             width: 100%;
@@ -39,7 +41,8 @@
             padding: 8px;
             border-radius: 5px;
             z-index: 100;
-            pointer-events: none; /* タッチイベントを下の要素にパスする */
+            pointer-events: none;
+            /* タッチイベントを下の要素にパスする */
         }
 
         /* カスタムのAR起動ボタンエリア */
@@ -62,7 +65,7 @@
             padding: 14px 28px;
             font-size: 16px;
             border-radius: 30px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
             cursor: pointer;
             outline: none;
             transition: transform 0.1s;
@@ -93,32 +96,26 @@
         }
     </style>
 </head>
+
 <body>
 
     <!-- デバッグログ表示エリア -->
     <div id="log-area">=== デバッグログ ===<br></div>
 
     <!-- 3D・ARビューア本体 -->
-    <model-viewer 
-        id="ar-viewer"
-        src="neko_s.glb" 
-        ios-src="neko_iphone_s.usdz" 
-        camera-controls 
-        touch-action="pan-y"
-        ar
-        ar-modes="webxr scene-viewer quick-look"
-        alt="A 3D model of a cat">
-        
+    <model-viewer id="ar-viewer" src="neko_s.glb" ios-src="neko_iphone_s.usdz" camera-controls touch-action="pan-y" ar
+        ar-modes="webxr scene-viewer quick-look" alt="A 3D model of a cat">
+
         <!-- WebXR時のDOMオーバーレイに配置する撮影ボタン -->
         <button id="capture-btn" class="btn">📸 写真撮影</button>
-        
+
     </model-viewer>
 
     <!-- AR起動ボタン用のコンテナ -->
     <div id="ar-ui-container">
         <!-- iOSまたはその他の環境用（標準のARモード起動） -->
         <button id="ar-btn-default" class="btn" style="display:none;">ARで見る</button>
-        
+
         <!-- Android用: 2つのモードを選択可能にする -->
         <button id="ar-btn-webxr" class="btn" style="display:none;">ブラウザで見る (WebXR)</button>
         <button id="ar-btn-scene" class="btn btn-secondary" style="display:none;">アプリで見る (Scene Viewer)</button>
@@ -126,7 +123,7 @@
 
     <script>
         const logArea = document.getElementById('log-area');
-        
+
         // ログ出力用関数
         function addLog(msg) {
             const time = new Date().toLocaleTimeString();
@@ -172,7 +169,7 @@
         // カスタムAR起動関数
         function activateAR(mode) {
             addLog(`AR起動を試行: ${mode}`);
-            
+
             // 選択されたモードを優先するように ar-modes 属性を書き換える
             if (mode === 'webxr') {
                 modelViewer.setAttribute('ar-modes', 'webxr scene-viewer quick-look');
@@ -181,13 +178,24 @@
             } else {
                 modelViewer.setAttribute('ar-modes', 'webxr scene-viewer quick-look');
             }
-            
-            // 書き換え後、少し待ってから activateAR() を実行
-            setTimeout(() => {
-                modelViewer.activateAR().catch((err) => {
-                    addLog('AR起動エラー: ' + err.message);
-                });
-            }, 50);
+
+            // iOSではsetTimeoutを使用するとユーザージェスチャーが失われ、AR(Quick Look)が起動できないため同期実行
+            if (isIOS) {
+                try {
+                    modelViewer.activateAR().catch((err) => {
+                        addLog('AR起動エラー: ' + err.message);
+                    });
+                } catch (e) {
+                    addLog('AR起動例外: ' + e.message);
+                }
+            } else {
+                // Android等では ar-modes の属性反映を待つために setTimeout を使用
+                setTimeout(() => {
+                    modelViewer.activateAR().catch((err) => {
+                        addLog('AR起動エラー: ' + err.message);
+                    });
+                }, 50);
+            }
         }
 
         // ボタンのクリックイベント登録
@@ -199,7 +207,7 @@
         modelViewer.addEventListener('ar-status', (event) => {
             const status = event.detail.status;
             addLog(`AR status変更: ${status}`);
-            
+
             if (status === 'session-started') {
                 // ARセッションが開始されたら起動メニューを隠す
                 containerUI.style.display = 'none';
@@ -233,18 +241,18 @@
                 // model-viewerのメソッドを使用してスクリーンショットのBlobを作成
                 const blob = await modelViewer.toBlob({ idealAspect: true });
                 const url = URL.createObjectURL(blob);
-                
+
                 // ダウンロード用リンクを作成し、プログラムからクリック
                 const a = document.createElement('a');
                 a.href = url;
                 a.download = 'ar-screenshot.png';
                 document.body.appendChild(a);
                 a.click();
-                
+
                 // アト始末
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
-                
+
                 addLog("写真の撮影とダウンロードに成功しました");
             } catch (err) {
                 addLog("写真撮影に失敗しました: " + err.message);
@@ -253,9 +261,10 @@
 
         // モデルロード完了イベント
         modelViewer.addEventListener('load', () => {
-             addLog("3Dモデル読み込み完了");
+            addLog("3Dモデル読み込み完了");
         });
 
     </script>
 </body>
+
 </html>

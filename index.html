@@ -1,338 +1,261 @@
 <!DOCTYPE html>
 <html lang="ja">
-
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebAR Viewer</title>
-    <!-- model-viewerの読み込み -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>WebAR 平面配置アプリ</title>
+    <!-- model-viewerコンポーネントの読み込み -->
     <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
     <style>
-        body {
+        body, html {
             margin: 0;
             padding: 0;
-            width: 100vw;
-            height: 100vh;
-            background-color: #f0f0f0;
-            font-family: sans-serif;
+            width: 100%;
+            height: 100%;
             overflow: hidden;
+            font-family: sans-serif;
+            background-color: #f0f0f0;
         }
 
+        /* 3Dモデルプレビューエリア */
         model-viewer {
             width: 100%;
             height: 100%;
+            --poster-color: transparent;
         }
 
-        /* ステータス表示のスタイル調整 */
-        .status-badge {
+        /* ログウィンドウ（画面右上） */
+        #log-area {
             position: absolute;
             top: 10px;
-            left: 10px;
-            background: rgba(255, 255, 255, 0.9);
-            padding: 8px 12px;
-            border-radius: 8px;
-            pointer-events: none;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            right: 10px;
+            width: 250px;
+            max-height: 200px;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.6);
+            color: #0f0;
+            font-family: monospace;
             font-size: 12px;
-            color: #333;
+            padding: 8px;
+            border-radius: 5px;
+            z-index: 100;
+            pointer-events: none; /* タッチイベントを下の要素にパスする */
+        }
+
+        /* カスタムのAR起動ボタンエリア */
+        #ar-ui-container {
+            position: absolute;
+            bottom: 40px;
+            left: 0;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
             z-index: 10;
         }
 
-        /* 撮影ボタンのスタイル */
-        #capture-button {
-            position: absolute;
-            bottom: 30px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
-            border: 4px solid white;
-            background-color: rgba(255, 255, 255, 0.3);
-            font-size: 30px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+        .btn {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 14px 28px;
+            font-size: 16px;
+            border-radius: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
             cursor: pointer;
-            z-index: 1000;
-            /* ARビューより手前に */
             outline: none;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
             transition: transform 0.1s;
         }
 
-        #capture-button:active {
-            transform: translateX(-50%) scale(0.9);
-            background-color: rgba(255, 255, 255, 0.6);
+        .btn:active {
+            transform: scale(0.95);
         }
 
-        /* メッセージ表示 */
-        #capture-message {
+        .btn-secondary {
+            background-color: #6c757d;
+        }
+
+        /* WebXR内で表示する撮影ボタン */
+        #capture-btn {
+            display: none;
             position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(0, 0, 0, 0.7);
-            color: white;
-            padding: 10px 20px;
-            border-radius: 20px;
-            opacity: 0;
-            transition: opacity 0.3s;
-            pointer-events: none;
-            z-index: 2000;
-        }
-
-        #capture-message.show {
-            opacity: 1;
-        }
-
-        /* フォールバック用ボタン（ネイティブAR起動） */
-        #fallback-button {
-            position: absolute;
-            bottom: 100px;
+            bottom: 40px;
             left: 50%;
             transform: translateX(-50%);
-            padding: 10px 20px;
-            background-color: #4285f4;
-            color: white;
-            border: none;
-            border-radius: 20px;
-            font-size: 14px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
-            z-index: 2000;
-            cursor: pointer;
+            z-index: 9999;
+            background-color: #28a745;
+        }
+
+        /* model-viewer標準のARボタンを非表示にする */
+        model-viewer::part(default-ar-button) {
             display: none;
-            /* 初期状態は非表示 */
         }
     </style>
-    <script>
-        // HTTPSチェック
-        if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
-            alert('WebAR（カメラ機能）を利用するには、HTTPS接続が必要です。');
-        }
-    </script>
 </head>
-
 <body>
-    <!-- 
-      3Dモデルの指定
-      ar-modes: 最初はwebxrを試みる
-    -->
-    <model-viewer src="./neko_s.glb" ios-src="./neko_iphone_s.usdz" alt="猫の3Dモデル" ar
-        ar-modes="webxr scene-viewer quick-look" ar-placement="floor" ar-scale="auto" camera-controls auto-rotate
-        shadow-intensity="1">
 
-        <button slot="ar-button" style="display: none;">
-            <!-- Default AR button hidden -->
-        </button>
+    <!-- デバッグログ表示エリア -->
+    <div id="log-area">=== デバッグログ ===<br></div>
+
+    <!-- 3D・ARビューア本体 -->
+    <model-viewer 
+        id="ar-viewer"
+        src="neko_s.glb" 
+        ios-src="neko_iphone_s.usdz" 
+        camera-controls 
+        touch-action="pan-y"
+        ar
+        ar-modes="webxr scene-viewer quick-look"
+        alt="A 3D model of a cat">
+        
+        <!-- WebXR時のDOMオーバーレイに配置する撮影ボタン -->
+        <button id="capture-btn" class="btn">📸 写真撮影</button>
+        
     </model-viewer>
 
-    <!-- 写真撮影ボタン -->
-    <button id="capture-button" aria-label="写真を撮る" style="display: none;">
-        📷
-    </button>
-
-    <!-- 状況表示用 -->
-    <div class="status-badge">
-        <p style="margin: 0;"><strong>WebARビューアー</strong><br>画面をタップしてARを開始</p>
+    <!-- AR起動ボタン用のコンテナ -->
+    <div id="ar-ui-container">
+        <!-- iOSまたはその他の環境用（標準のARモード起動） -->
+        <button id="ar-btn-default" class="btn" style="display:none;">ARで見る</button>
+        
+        <!-- Android用: 2つのモードを選択可能にする -->
+        <button id="ar-btn-webxr" class="btn" style="display:none;">ブラウザで見る (WebXR)</button>
+        <button id="ar-btn-scene" class="btn btn-secondary" style="display:none;">アプリで見る (Scene Viewer)</button>
     </div>
-
-    <!-- AR開始用オーバーレイ (選択式) -->
-    <div id="ar-prompt" style="
-        position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
-        display: flex; flex-direction: column; align-items: center; justify-content: center; 
-        background: rgba(0,0,0,0.6); color: white; z-index: 999;">
-
-        <div style="margin-bottom: 20px; text-align: center;">
-            <p style="font-size: 24px; font-weight: bold; margin: 0;">AR表示モードを選択</p>
-            <p style="font-size: 12px; opacity: 0.8;">(Androidの方は「アプリで見る」が推奨です)</p>
-        </div>
-
-        <!-- 選択ボタン -->
-        <div style="display: flex; gap: 20px;">
-            <button id="btn-native-ar" style="
-                padding: 15px 30px; border-radius: 30px; border: none; 
-                background: #4285f4; color: white; font-weight: bold; font-size: 16px; 
-                box-shadow: 0 4px 10px rgba(0,0,0,0.3); cursor: pointer;">
-                📱 アプリで見る<br><span style="font-size:10px; font-weight:normal;">(安定版 / SceneViewer)</span>
-            </button>
-
-            <button id="btn-web-ar" style="
-                padding: 15px 30px; border-radius: 30px; border: 2px solid white; 
-                background: rgba(255,255,255,0.2); color: white; font-weight: bold; font-size: 16px; 
-                backdrop-filter: blur(5px); cursor: pointer;">
-                🌐 ブラウザで見る<br><span style="font-size:10px; font-weight:normal;">(Beta / WebXR)</span>
-            </button>
-        </div>
-        <p style="font-size: 10px; margin-top: 20px; opacity: 0.6;">※iPhoneの方はどちらを押してもQuickLookが起動します</p>
-    </div>
-
-    <!-- キャプチャ完了メッセージ -->
-    <div id="capture-message">保存しました</div>
-
-    <!-- デバッグログ表示用 -->
-    <div id="debug-log" style="
-        position: absolute; top: 10px; right: 10px; width: 200px; max-height: 150px; 
-        background: rgba(0,0,0,0.7); color: lime; font-family: monospace; font-size: 10px; 
-        overflow-y: auto; z-index: 2000; padding: 5px; pointer-events: none; border-radius: 4px; display: none;">
-        Debug Log...
-    </div>
-
-    <!-- 診断用ボタン: 動作確認済みモデルへ切り替え -->
-    <button id="btn-test-model"
-        style="
-        position: absolute; top: 70px; left: 10px; z-index: 3000;
-        padding: 8px 12px; font-size: 12px; background: #ffaa00; border: 2px solid white; border-radius: 4px; color: black; font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.5);">
-        ⚠️ テスト用モデルに切替
-    </button>
 
     <script>
-        const modelViewer = document.querySelector('model-viewer');
-        const captureButton = document.getElementById('capture-button');
-        const captureMessage = document.getElementById('capture-message');
-        const arPrompt = document.getElementById('ar-prompt');
-        const btnNativeAR = document.getElementById('btn-native-ar');
-        const btnWebAR = document.getElementById('btn-web-ar');
-        const debugLog = document.getElementById('debug-log');
-        const btnTestModel = document.getElementById('btn-test-model');
-
-        // ログ出力関数
-        const log = (msg) => {
-            console.log(msg);
+        const logArea = document.getElementById('log-area');
+        
+        // ログ出力用関数
+        function addLog(msg) {
             const time = new Date().toLocaleTimeString();
-            debugLog.innerHTML = `[${time}] ${msg}<br>` + debugLog.innerHTML;
-            // ログが出たら表示する
-            debugLog.style.display = 'block';
-        };
+            logArea.innerHTML += `[${time}] ${msg}<br>`;
+            logArea.scrollTop = logArea.scrollHeight;
+            console.log(msg);
+        }
 
-        log("初期化開始: " + navigator.userAgent);
-
-        // テストモデル切り替え機能
-        btnTestModel.addEventListener('click', () => {
-            log("テストモデル(Astronaut)に切り替えます...");
-            modelViewer.src = "https://modelviewer.dev/shared-assets/models/Astronaut.glb";
-            modelViewer.iosSrc = "https://modelviewer.dev/shared-assets/models/Astronaut.usdz";
-            modelViewer.alt = "テスト用宇宙飛行士";
-            alert("Google公式のサンプルモデル(宇宙飛行士)に切り替えました。\nこれで「アプリで見る」を試してください。\n\nもしこれで動くなら、あなたのファイル(neko_s.glb)に問題があるか、GitHubのアクセス権(Private)の問題です。");
+        // グローバルなエラーを取得してログに表示
+        window.addEventListener('error', (event) => {
+            addLog(`Error: ${event.message}`);
+        });
+        window.addEventListener('unhandledrejection', (event) => {
+            addLog(`Promise Error: ${event.reason}`);
         });
 
-        // ネイティブAR (Scene Viewer / Quick Look) 開始
-        btnNativeAR.addEventListener('click', () => {
-            log("「アプリで見る」クリック");
+        addLog("アプリ初期化完了");
 
-            const isAndroid = /Android/i.test(navigator.userAgent);
+        const modelViewer = document.getElementById('ar-viewer');
+        const containerUI = document.getElementById('ar-ui-container');
+        const btnDefault = document.getElementById('ar-btn-default');
+        const btnWebxr = document.getElementById('ar-btn-webxr');
+        const btnScene = document.getElementById('ar-btn-scene');
+        const captureBtn = document.getElementById('capture-btn');
 
-            if (isAndroid) {
-                log("Android端末検出: Intent起動を試みます(v2)");
+        // デバイスの判定
+        const ua = navigator.userAgent;
+        const isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+        const isAndroid = /Android/.test(ua);
 
-                // GLBファイルの絶対URLを取得
-                const glbUrl = new URL(modelViewer.src, window.location.href).href;
-                const title = modelViewer.alt || "3D Model";
+        addLog(`Device: ${isIOS ? 'iOS' : (isAndroid ? 'Android' : 'Other')}`);
 
-                // Android Intent URLの構築 (Scene Viewer直接起動 - 完全版)
-                // browser_fallback_url: 失敗時に戻ってくるURL (現在のページ)
+        // プラットフォームに応じたボタンの表示切替
+        if (isAndroid) {
+            // Androidの場合は2つのボタンを表示 (WebXR / Scene Viewer)
+            btnWebxr.style.display = 'block';
+            btnScene.style.display = 'block';
+        } else {
+            // iOSなどの場合は単一の標準ARボタンを表示 (Quick Lookなど)
+            btnDefault.style.display = 'block';
+        }
 
-                const scheme = "intent://arvr.google.com/scene-viewer/1.0";
-                const params = `?file=${encodeURIComponent(glbUrl)}&mode=ar_only&title=${encodeURIComponent(title)}`;
-                const suffix = `#Intent;scheme=https;package=com.google.ar.core;action=android.intent.action.VIEW;S.browser_fallback_url=${encodeURIComponent(window.location.href)};end;`;
-
-                const intentUrl = scheme + params + suffix;
-
-                log("Intent遷移: " + intentUrl);
-
-                // 遷移実行
-                window.location.href = intentUrl;
-
+        // カスタムAR起動関数
+        function activateAR(mode) {
+            addLog(`AR起動を試行: ${mode}`);
+            
+            // 選択されたモードを優先するように ar-modes 属性を書き換える
+            if (mode === 'webxr') {
+                modelViewer.setAttribute('ar-modes', 'webxr scene-viewer quick-look');
+            } else if (mode === 'scene-viewer') {
+                modelViewer.setAttribute('ar-modes', 'scene-viewer webxr quick-look');
             } else {
-                // iOSなどは従来の起動方法
-                log("非Android: 標準起動");
-                modelViewer.setAttribute('ar-modes', 'scene-viewer quick-look');
-
-                setTimeout(async () => {
-                    try {
-                        log("activateAR() 実行...");
-                        await modelViewer.activateAR();
-                        log("activateAR() 呼び出し完了");
-                    } catch (error) {
-                        log("Native AR Error: " + error.message);
-                        alert("アプリの起動に失敗しました: " + error.message);
-                    }
-                }, 100);
+                modelViewer.setAttribute('ar-modes', 'webxr scene-viewer quick-look');
             }
-        });
-
-        // WebAR (WebXR) 開始
-        btnWebAR.addEventListener('click', () => {
-            log("「ブラウザで見る」クリック");
-            // WebXRのみを許可設定に変更
-            modelViewer.setAttribute('ar-modes', 'webxr');
-            log("ar-modesを 'webxr' に設定");
-
+            
+            // 書き換え後、少し待ってから activateAR() を実行
             setTimeout(() => {
-                log("activateAR() 実行");
-                modelViewer.activateAR();
-            }, 100);
-        });
+                modelViewer.activateAR().catch((err) => {
+                    addLog('AR起動エラー: ' + err.message);
+                });
+            }, 50);
+        }
 
-        // ARステータスの監視
+        // ボタンのクリックイベント登録
+        btnWebxr.addEventListener('click', () => activateAR('webxr'));
+        btnScene.addEventListener('click', () => activateAR('scene-viewer'));
+        btnDefault.addEventListener('click', () => activateAR('default'));
+
+        // ARステータス変更イベント (セッション開始・終了の検知)
         modelViewer.addEventListener('ar-status', (event) => {
             const status = event.detail.status;
-            log("AR Status: " + status);
-
+            addLog(`AR status変更: ${status}`);
+            
             if (status === 'session-started') {
-                // セッション開始成功
-                arPrompt.style.display = 'none';
+                // ARセッションが開始されたら起動メニューを隠す
+                containerUI.style.display = 'none';
 
-                // WebXRの場合のみ撮影ボタンを表示
-                // (SceneViewer等は別アプリになるため、ここには戻ってこないか、戻ってもボタンは不要)
-                if (modelViewer.getAttribute('ar-modes') === 'webxr') {
-                    captureButton.style.display = 'flex';
-                    log("WebXRセッション: ボタン表示");
+                // WebXRモードかどうかを調べて撮影ボタンを表示する
+                // (Scene ViewerやQuick Lookは別アプリ起動となるためDOMオーバーレイは効かない)
+                const isWebxrActive = modelViewer.getAttribute('ar-modes').startsWith('webxr');
+                // ブラウザによるWebXR処理中であれば撮影ボタンを表示
+                if (isWebxrActive || status === 'session-started') {
+                    // 確実にWebXRのDOM Overlay上で見せる
+                    captureBtn.style.display = 'block';
                 }
             } else if (status === 'not-presenting') {
-                // AR終了
-                arPrompt.style.display = 'flex';
-                captureButton.style.display = 'none';
-                log("AR終了: メニュー再表示");
-
-                // 設定をリセット（念のため）
-                modelViewer.setAttribute('ar-modes', 'webxr scene-viewer quick-look');
-            } else if (status === 'failed') {
-                log("AR起動失敗");
-                alert("AR起動に失敗しました。もう一方のモードをお試しください。");
+                // ARセッション終了時は元のUI状態へ戻す
+                containerUI.style.display = 'flex';
+                captureBtn.style.display = 'none';
+                addLog('ARモードを終了しました');
             }
         });
 
-        // エラーイベント
-        modelViewer.addEventListener('error', (e) => {
-            log("Error: " + (e.detail.type || "unknown"));
-            alert("エラーが発生しました: " + (e.detail.type || "unknown"));
+        // 3Dモデル読み込みエラー時
+        modelViewer.addEventListener('error', (event) => {
+            addLog(`Viewer Error: 詳細をコンソールで確認してください`);
+            console.error(event.detail);
         });
 
-        // スクリーンショット撮影機能 (WebXR用)
-        captureButton.addEventListener('click', async (e) => {
-            e.stopPropagation();
+        // 撮影ボタン処理機能（WebXRモード用）
+        captureBtn.addEventListener('click', async () => {
+            addLog("写真撮影ボタンが押されました");
             try {
-                const blob = await modelViewer.toBlob({ mimeType: 'image/png' });
+                // model-viewerのメソッドを使用してスクリーンショットのBlobを作成
+                const blob = await modelViewer.toBlob({ idealAspect: true });
                 const url = URL.createObjectURL(blob);
+                
+                // ダウンロード用リンクを作成し、プログラムからクリック
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = 'ar-photo-' + new Date().toISOString().replace(/[:.]/g, '-') + '.png';
+                a.download = 'ar-screenshot.png';
                 document.body.appendChild(a);
                 a.click();
+                
+                // アト始末
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
-
-                captureMessage.classList.add('show');
-                setTimeout(() => {
-                    captureMessage.classList.remove('show');
-                }, 2000);
-            } catch (error) {
-                log("撮影エラー: " + error.message);
-                alert('撮影に失敗しました。');
+                
+                addLog("写真の撮影とダウンロードに成功しました");
+            } catch (err) {
+                addLog("写真撮影に失敗しました: " + err.message);
             }
         });
+
+        // モデルロード完了イベント
+        modelViewer.addEventListener('load', () => {
+             addLog("3Dモデル読み込み完了");
+        });
+
     </script>
 </body>
-
 </html>
